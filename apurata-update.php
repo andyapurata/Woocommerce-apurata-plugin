@@ -33,7 +33,7 @@ class Apurata_Update {
         add_filter( 'plugins_api', array( $this, 'plugin_popup' ), 10, 3);
         add_filter( 'upgrader_post_install', array( $this, 'after_install' ), 10, 3 );
         error_log("SE INICIO");
-        $this->check_repository_files();    
+        //$this->check_repository_files();    
     }
 
     public function set_plugin_properties() {
@@ -89,15 +89,15 @@ class Apurata_Update {
         if (is_null($this->github_response)) { 
             $request_uri = $this->make_request_uri('https://api.github.com/repos/%s/%s/releases');
             $body_response = $this->get_github_response($request_uri);
+            if(is_array($body_response)) {
+                $body_response = current($body_response);
+            }
             $required_parameters = array('zipball_url','tag_name');
             foreach ($required_parameters as $parameter) {
                 if(!isset($body_response[$parameter])){
                     apurata_log("Apurata Github response does not contain the '" . $parameter . "'parameter.");
                     return false;
                 }
-            }
-            if(!is_array($body_response)) {
-                $body_response = current($body_response);
             }
             if ($this->authorize_token) {
                 $body_response['zipball_url'] = add_query_arg('access_token', $this->authorize_token, $body_response['zipball_url']);
