@@ -28,6 +28,14 @@ class Apurata_Update {
         return $this;
     }
 
+    public function initialize() {
+        add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'modify_transient' ), 10, 1 );
+        add_filter( 'plugins_api', array( $this, 'plugin_popup' ), 10, 3);
+        add_filter( 'upgrader_post_install', array( $this, 'after_install' ), 10, 3 );
+        error_log("SE INICIO");
+        $this->check_repository_files();    
+    }
+
     public function set_plugin_properties() {
         $this->plugin = get_plugin_data($this->file);
         $this->basename = plugin_basename($this->file);
@@ -45,36 +53,51 @@ class Apurata_Update {
     public function authorize($token) {
         $this->authorize_token = $token;
     }
-    
+    private function make_request_uri($uri) {
+        $request_uri = sprintf($uri, $this->username, $this->repository);
+        return $request_uri;
+    }
+    private function get_github_response($request_uri) {
+        if ($this->authorize_token) {
+            $request_uri = add_query_arg('access_token', $this->authorize_token, $request_uri); 
+        }
+        $response = wp_remote_get($request_uri);
+        $httpCode = wp_remote_retrieve_response_code($response);
+        if ($httpCode != 200) {
+            apurata_log(sprintf('Apurata Github responded with http_code %s at %s', $httpCode, $request_uri));
+            return false;
+        }
+        $body_response = json_decode(wp_remote_retrieve_body($response), true);
+        if (!$body_response) {
+            apurata_log('Apurata Github response does not contain body');
+            return false;
+        }  
+        return $body_response;
+    }
+    private function check_repository_files() {
+        $request_uri = $this->make_request_uri('https://api.github.com/repos/%s/%s/git/trees/master?recursive=1');
+        $body_response = $this->get_github_response($request_uri);
+        $tree = $body_response['tree'];
+        console_log("ARBOL");
+        console_log($body_response);
+        console_log($tree);
+        foreach($tree as $path){
+            console_log($path['path']);
+        }
+    }
     private function get_repository_info() {
         if (is_null($this->github_response)) { 
-            $request_uri = sprintf('https://api.github.com/repos/%s/%s/releases', $this->username, $this->repository);
-            if ($this->authorize_token) {
-                $request_uri = add_query_arg('access_token', $this->authorize_token, $request_uri); 
-            }
-            $response = wp_remote_get($request_uri);
-            
-            $httpCode = wp_remote_retrieve_response_code($response);
-            if ($httpCode != 200) {
-                apurata_log(sprintf('Apurata Github responded with http_code %s at %s', $httpCode, $request_uri));
-                return false;
-            }
-            $body_response = json_decode(wp_remote_retrieve_body($response), true);
-            error_log("RESPUESTA");
-            console_log($body_response);
-            if (!$body_response) {
-                apurata_log('Apurata Github response does not contain body');
-                return false;
-            }
-            if(is_array($body_response)) {
-                $body_response = current($body_response);
-            }
+            $request_uri = $this->make_request_uri('https://api.github.com/repos/%s/%s/releases');
+            $body_response = $this->get_github_response($request_uri);
             $required_parameters = array('zipball_url','tag_name');
             foreach ($required_parameters as $parameter) {
                 if(!isset($body_response[$parameter])){
                     apurata_log("Apurata Github response does not contain the '" . $parameter . "'parameter.");
                     return false;
                 }
+            }
+            if(!is_array($body_response)) {
+                $body_response = current($body_response);
             }
             if ($this->authorize_token) {
                 $body_response['zipball_url'] = add_query_arg('access_token', $this->authorize_token, $body_response['zipball_url']);
@@ -84,20 +107,12 @@ class Apurata_Update {
         }
     }
 
-    public function initialize() {
-        add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'modify_transient' ), 10, 1 );
-        add_filter( 'plugins_api', array( $this, 'plugin_popup' ), 10, 3);
-        add_filter( 'upgrader_post_install', array( $this, 'after_install' ), 10, 3 );
-        error_log("SE INICIO");
-    }
+    
 
     public function modify_transient($transient) {
-        error_log("SE LLAMO A LA FUNCION");
         if(property_exists($transient, 'checked') && $checked = $transient->checked) {
-            error_log("ENTRE A LA FUNCION");
             if (!$this->get_repository_info())
                 return $transient;
-            error_log("OBTUVE LOS DATOS");
             console_log($checked);
             $current_version = $checked[$this->basename];
             $new_version = substr($this->github_response['tag_name'], 1);
