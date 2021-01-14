@@ -31,7 +31,7 @@ class Apurata_Update {
     public function initialize() {
         add_filter('pre_set_site_transient_update_plugins', array($this,'modify_transient'), 10, 1 );
         add_filter('plugins_api', array( $this, 'plugin_popup'), 10, 3);
-        //add_filter('upgrader_post_install', array($this, 'after_install'), 10, 3 );  
+        add_filter('upgrader_post_install', array($this, 'after_install'), 10, 3 );  
     }
 
     public function set_plugin_properties() {
@@ -180,7 +180,11 @@ class Apurata_Update {
 
     public function after_install( $response, $hook_extra, $result ) {
         global $wp_filesystem;
-        error_log("ACTUALIZACION");
+        error_log("termino actualizacion");
+        console_log("RESPONSE");
+        console_log($response);
+        console_log("ReSULT");
+        console_log($result);
         $install_directory = plugin_dir_path( $this->file );
         $wp_filesystem->move( $result['destination'], $install_directory );
         $result['destination'] = $install_directory;
