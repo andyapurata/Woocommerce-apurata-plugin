@@ -172,8 +172,8 @@ if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', g
     
     include_once( plugin_dir_path( __FILE__ ) . 'apurata-update.php');
     $updater = new Apurata_Update( __FILE__ );
-    $updater->set_username('apurata'); 
-    $updater->set_repository('woocommerce-acuotaz-payment-gateway'); 
+    $updater->set_username('andyapurata'); 
+    $updater->set_repository('Woocommerce-apurata-plugin'); 
     $updater->initialize(); 
 
     function init_wc_apurata_payment_gateway() {

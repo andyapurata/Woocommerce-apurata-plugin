@@ -31,7 +31,7 @@ class Apurata_Update {
     public function initialize() {
         add_filter('pre_set_site_transient_update_plugins', array($this,'modify_transient'), 10, 1 );
         add_filter('plugins_api', array( $this, 'plugin_popup'), 10, 3);
-        add_filter('upgrader_post_install', array($this, 'after_install'), 10, 3 );  
+        //add_filter('upgrader_post_install', array($this, 'after_install'), 10, 3 );  
     }
 
     public function set_plugin_properties() {
@@ -107,7 +107,7 @@ class Apurata_Update {
                         return false;
                     }
                 }
-                if ($this->check_repository_files()) {
+                if (!$this->check_repository_files()) {
                     return false;
                 }
                 if ($this->authorize_token) {
@@ -125,7 +125,9 @@ class Apurata_Update {
     
 
     public function modify_transient($transient) {
+        error_log("entre a la funcion");
         if(property_exists($transient, 'checked') && $checked = $transient->checked) {
+            error_log("pero no checkeo los plugins");
             if (!$this->get_repository_info())
                 return $transient;
             $current_version = $checked[$this->basename];
