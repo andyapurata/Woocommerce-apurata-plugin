@@ -29,11 +29,9 @@ class Apurata_Update {
     }
 
     public function initialize() {
-        add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'modify_transient' ), 10, 1 );
-        add_filter( 'plugins_api', array( $this, 'plugin_popup' ), 10, 3);
-        add_filter( 'upgrader_post_install', array( $this, 'after_install' ), 10, 3 );
-        error_log("SE INICIO");
-        //$this->check_repository_files();    
+        add_filter('pre_set_site_transient_update_plugins', array($this,'modify_transient'), 10, 1 );
+        add_filter('plugins_api', array( $this, 'plugin_popup'), 10, 3);
+        add_filter('upgrader_post_install', array($this, 'after_install'), 10, 3 );  
     }
 
     public function set_plugin_properties() {
@@ -53,13 +51,16 @@ class Apurata_Update {
     public function authorize($token) {
         $this->authorize_token = $token;
     }
+
     private function make_request_uri($uri) {
-        $request_uri = sprintf($uri, $this->username, $this->repository);
-        return $request_uri;
+        return sprintf($uri, $this->username, $this->repository);
     }
+
     private function get_github_response($request_uri) {
         if ($this->authorize_token) {
-            $request_uri = add_query_arg('access_token', $this->authorize_token, $request_uri); 
+            $request_uri = add_query_arg(array(
+                'access_token' => $this->authorize_token
+            ), $request_uri); 
         }
         $response = wp_remote_get($request_uri);
         $httpCode = wp_remote_retrieve_response_code($response);
@@ -76,35 +77,49 @@ class Apurata_Update {
     }
     private function check_repository_files() {
         $request_uri = $this->make_request_uri('https://api.github.com/repos/%s/%s/git/trees/master?recursive=1');
-        $body_response = $this->get_github_response($request_uri);
-        $tree = $body_response['tree'];
-        console_log("ARBOL");
-        console_log($body_response);
-        console_log($tree);
-        foreach($tree as $path){
-            console_log($path['path']);
+        if ($body_response = $this->get_github_response($request_uri)) {
+            $tree = $body_response['tree'];
+            $necessary_files = array('readme.txt','apurata-update.php','woocommerce-apurata-payment-gateway.php');
+            $repository_files = array();
+            foreach($tree as $path){
+                $repository_files[] = $path['path'];
+            }
+            foreach ($necessary_files as $file) {
+                if (!in_array($file,$repository_files)) {
+                    apurata_log('Error: The file ' . $file . ' was not found');
+                    return false;
+                }
+            }
+            return true;
         }
     }
     private function get_repository_info() {
         if (is_null($this->github_response)) { 
             $request_uri = $this->make_request_uri('https://api.github.com/repos/%s/%s/releases');
-            $body_response = $this->get_github_response($request_uri);
-            if(is_array($body_response)) {
-                $body_response = current($body_response);
-            }
-            $required_parameters = array('zipball_url','tag_name');
-            foreach ($required_parameters as $parameter) {
-                if(!isset($body_response[$parameter])){
-                    apurata_log("Apurata Github response does not contain the '" . $parameter . "'parameter.");
+            if ($body_response = $this->get_github_response($request_uri)){
+                if(is_array($body_response)) {
+                    $body_response = current($body_response);
+                }
+                $required_parameters = array('zipball_url', 'tag_name', 'published_at');
+                foreach ($required_parameters as $parameter) {
+                    if(!isset($body_response[$parameter])){
+                        apurata_log("Apurata Github response does not contain the '" . $parameter . "'parameter.");
+                        return false;
+                    }
+                }
+                if ($this->check_repository_files()) {
                     return false;
                 }
-            }
-            if ($this->authorize_token) {
-                $body_response['zipball_url'] = add_query_arg('access_token', $this->authorize_token, $body_response['zipball_url']);
-            }
-            $this->github_response = $body_response;
-            return true;
+                if ($this->authorize_token) {
+                    $body_response['zipball_url'] = add_query_arg( array(
+                        'access_token' => $this->authorize_token
+                    ), $body_response['zipball_url']);   
+                }
+                $this->github_response = $body_response;
+                return true;
+            }  
         }
+        return false;
     }
 
     
@@ -113,12 +128,10 @@ class Apurata_Update {
         if(property_exists($transient, 'checked') && $checked = $transient->checked) {
             if (!$this->get_repository_info())
                 return $transient;
-            console_log($checked);
             $current_version = $checked[$this->basename];
             $new_version = substr($this->github_response['tag_name'], 1);
             $out_of_date = version_compare($new_version, $current_version, 'gt');
             if ($out_of_date) {
-                error_log("ACTUALIZAR");
                 $new_files = $this->github_response['zipball_url'];
                 $slug = current(explode('/', $this->basename) );
                 $plugin = array(
@@ -133,30 +146,30 @@ class Apurata_Update {
         return $transient; 
     }
 
-    public function plugin_popup($result, $action, $args) {
-        error_log("DETALLES");
+    public function plugin_popup($result, $action, $args) { 
         if (!empty($args->slug)) {
             if ($args->slug == current(explode('/' , $this->basename ))) { 
-                $this->get_repository_info();
-                
                 $plugin = array(
-                    'name'				=> $this->plugin["Name"],
+                    'name'				=> $this->plugin['Name'],
                     'slug'				=> $this->basename,
-                    'requires'			=> '3.3',
-                    'tested'			=> '4.5.1',
-                    'added'				=> '2016-01-05',
-                    'version'			=> $this->github_response['tag_name'],
+                    'requires'			=> $this->plugin['WC requires at least'],
+                    'tested'			=> $this->plugin['WC tested up to'],
                     'author'			=> $this->plugin["AuthorName"],
                     'author_profile'	=> $this->plugin["AuthorURI"],
-                    'last_updated'		=> $this->github_response['published_at'],
                     'homepage'			=> $this->plugin["PluginURI"],
                     'short_description' => $this->plugin["Description"],
-                    'sections'			=> array(
-                        'Description'	    => $this->plugin["Description"],
-                        'Updates'		    => $this->github_response['body'],
-                    ),
-                    'download_link'		=> $this->github_response['zipball_url']
                 );
+                if ($this->get_repository_info()) {
+                    $plugin += array(
+                        'version'			=> $this->github_response['tag_name'],
+                        'last_updated'		=> $this->github_response['published_at'],
+                        'sections'			=> array(
+                            'Description'	=> $this->plugin["Description"],
+                            'Updates'		=> $this->github_response['body'],
+                        ),
+                        'download_link'		=> $this->github_response['zipball_url']
+                    );
+                }
                 return (object) $plugin;
             }
         }
